@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Text, View, TouchableOpacity, ScrollView, StyleSheet, SafeAreaView, StatusBar, Animated, Platform, Modal, TextInput, useColorScheme, PanResponder, Alert } from 'react-native';
+import { Text, View, TouchableOpacity, ScrollView, StyleSheet, SafeAreaView, StatusBar, Animated, Platform, Modal, TextInput, useColorScheme, PanResponder, Alert, Pressable } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { EnergyEntry } from './types';
@@ -7,6 +7,7 @@ import Insights from './insights';
 import { saveEntry, getEntries, updateEntry, deleteEntry } from './firebase';
 import * as Notifications from 'expo-notifications';
 import { registerForPushNotificationsAsync, scheduleDailyNotifications, handleNotificationResponse } from './notifications';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const ENERGY_LEVELS = [
   { value: 1, emoji: '😴', label: '1' },
@@ -17,6 +18,124 @@ const ENERGY_LEVELS = [
 ];
 
 const HOLD_DURATION = 500;
+
+interface HistoryTileProps {
+  level: number;
+  timestamp: number;
+  id?: string;
+  comment?: string | null;
+  theme: {
+    text: string;
+    textSecondary: string;
+    surface: string;
+    surfacePressed: string;
+    border: string;
+  };
+  onDelete: (id: string) => void;
+  onCommentPress: () => void;
+  swipeAnim: Animated.Value;
+  panHandlers: any;
+  isCommentExpanded?: boolean;
+}
+
+const HistoryTile: React.FC<HistoryTileProps> = ({ 
+  level, 
+  timestamp, 
+  id, 
+  comment,
+  theme, 
+  onDelete,
+  onCommentPress,
+  swipeAnim,
+  panHandlers,
+  isCommentExpanded
+}) => {
+  const formatTime = (timestamp: number) => {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString('en-US', { 
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: true 
+    });
+  };
+
+  const getEnergyColor = (level: number): readonly [string, string] => {
+    const colors = {
+      1: ['#FF6B6B', '#FFA06B'] as const,
+      2: ['#FFA06B', '#FFD06B'] as const,
+      3: ['#6BCB77', '#92EFFD'] as const,
+      4: ['#4E65FF', '#92EFFD'] as const,
+      5: ['#4E65FF', '#C392FD'] as const
+    };
+    return colors[level as keyof typeof colors] || colors[3];
+  };
+
+  return (
+    <View style={styles.tileWrapper}>
+      <Animated.View 
+        style={[
+          styles.deleteButton,
+          {
+            opacity: swipeAnim.interpolate({
+              inputRange: [-80, 0],
+              outputRange: [1, 0],
+              extrapolate: 'clamp'
+            })
+          }
+        ]}
+      >
+        <TouchableOpacity 
+          onPress={() => id && onDelete(id)}
+          style={styles.deleteButtonInner}
+        >
+          <Text style={styles.deleteButtonText}>🗑️</Text>
+        </TouchableOpacity>
+      </Animated.View>
+      <Animated.View 
+        {...panHandlers}
+        style={[
+          styles.historyTile,
+          { 
+            backgroundColor: theme.surface,
+            transform: [{
+              translateX: swipeAnim
+            }]
+          }
+        ]}
+      >
+        <View style={styles.levelIndicator}>
+          <LinearGradient
+            colors={getEnergyColor(level)}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.energyBadge}
+          >
+            <Text style={styles.levelText}>{level}</Text>
+          </LinearGradient>
+        </View>
+        <View style={styles.timeContainer}>
+          <Text style={[styles.timeText, { color: theme.textSecondary }]}>
+            {formatTime(timestamp)}
+          </Text>
+        </View>
+        <TouchableOpacity 
+          onPress={onCommentPress}
+          style={styles.commentButton}
+        >
+          <Text style={[
+            styles.commentIcon,
+            { opacity: comment ? 1 : 0.3 }
+          ]}>💭</Text>
+        </TouchableOpacity>
+      </Animated.View>
+      {isCommentExpanded && comment && (
+        <View style={[styles.commentContainer, { borderTopColor: theme.border }]}>
+          <Text style={[styles.commentText, { color: theme.textSecondary }]}>{comment}</Text>
+        </View>
+      )}
+    </View>
+  );
+};
 
 export default function App() {
   const [entries, setEntries] = useState<EnergyEntry[]>([]);
@@ -396,87 +515,27 @@ export default function App() {
           ))}
         </View>
 
-        <View style={styles.content}>
+        <View style={styles.historySection}>
           <Text style={[styles.historyTitle, { color: theme.text }]}>History</Text>
-          <ScrollView 
-            style={styles.entriesList}
-            showsVerticalScrollIndicator={false}
-          >
-            {Object.entries(groupedEntries).map(([date, dateEntries]) => (
+          <ScrollView style={styles.historyList}>
+            {Object.entries(groupEntriesByDate(entries)).map(([date, dateEntries]) => (
               <View key={date}>
                 <Text style={[styles.dateHeader, { color: theme.textSecondary }]}>{date}</Text>
-                {dateEntries.map((entry) => {
-                  const panResponder = createPanResponder(entry.id || '');
-                  const swipeAnim = getSwipeAnim(entry.id || '');
-                  
-                  return (
-                    <View key={entry.timestamp} style={{ position: 'relative' }}>
-                      <Animated.View 
-                        style={[
-                          styles.deleteButton,
-                          {
-                            opacity: swipeAnim.interpolate({
-                              inputRange: [swipeThreshold, 0],
-                              outputRange: [1, 0],
-                              extrapolate: 'clamp'
-                            })
-                          }
-                        ]}
-                      >
-                        <TouchableOpacity 
-                          onPress={() => handleDelete(entry.id || '')}
-                          style={styles.deleteButtonInner}
-                        >
-                          <Text style={styles.deleteButtonText}>🗑️</Text>
-                        </TouchableOpacity>
-                      </Animated.View>
-                      <Animated.View 
-                        {...panResponder.panHandlers}
-                        style={[
-                          styles.entryItem,
-                          { 
-                            backgroundColor: theme.surface,
-                            transform: [{
-                              translateX: swipeAnim
-                            }]
-                          }
-                        ]}
-                      >
-                        <View style={styles.entryHeader}>
-                          <View style={styles.entryInfo}>
-                            <View style={[styles.energyBadge, { 
-                              backgroundColor: getEnergyColor(entry.level, colorScheme === 'light') 
-                            }]}>
-                              <Text style={[styles.energyLevel, { 
-                                color: colorScheme === 'light' ? '#000000' : '#FFFFFF',
-                                opacity: 0.9
-                              }]}>{entry.level}</Text>
-                            </View>
-                          </View>
-                          <View style={styles.entryActions}>
-                            <Text style={[styles.entryTime, { color: theme.textSecondary }]}>
-                              {formatDate(entry.timestamp).time}
-                            </Text>
-                            <TouchableOpacity 
-                              onPress={() => handleCommentIconPress(entry)}
-                              style={styles.commentButton}
-                            >
-                              <Text style={[
-                                styles.commentIcon,
-                                { opacity: entry.comment ? 1 : 0.3 }
-                              ]}>💭</Text>
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                        {expandedCommentId === entry.timestamp && entry.comment && (
-                          <View style={[styles.commentContainer, { borderTopColor: theme.border }]}>
-                            <Text style={[styles.commentText, { color: theme.textSecondary }]}>{entry.comment}</Text>
-                          </View>
-                        )}
-                      </Animated.View>
-                    </View>
-                  );
-                })}
+                {dateEntries.map((entry) => (
+                  <HistoryTile
+                    key={entry.timestamp}
+                    id={entry.id}
+                    level={entry.level}
+                    timestamp={entry.timestamp}
+                    comment={entry.comment}
+                    theme={theme}
+                    onDelete={handleDelete}
+                    onCommentPress={() => handleCommentIconPress(entry)}
+                    swipeAnim={getSwipeAnim(entry.id || '')}
+                    panHandlers={createPanResponder(entry.id || '').panHandlers}
+                    isCommentExpanded={expandedCommentId === entry.timestamp}
+                  />
+                ))}
               </View>
             ))}
           </ScrollView>
@@ -667,70 +726,51 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 24,
   },
+  historySection: {
+    flex: 1,
+    marginTop: 24,
+  },
   historyTitle: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '600',
     marginBottom: 16,
+    paddingHorizontal: 20,
   },
-  entriesList: {
-    flex: 1,
+  historyList: {
+    paddingHorizontal: 20,
   },
-  entryItem: {
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
-  },
-  entryHeader: {
+  historyTile: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: 'transparent',
+    zIndex: 1,
+  },
+  levelIndicator: {
+    marginRight: 16,
   },
   energyBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  energyLevel: {
-    fontSize: 17,
-    fontWeight: '600',
-  },
-  entryInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  entryActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  entryTime: {
-    fontSize: 15,
-  },
-  commentButton: {
-    padding: 4,
-    marginLeft: 4,
-  },
-  commentIcon: {
+  levelText: {
+    color: '#FFFFFF',
     fontSize: 16,
-  },
-  dateHeader: {
-    fontSize: 15,
     fontWeight: '600',
-    marginBottom: 8,
-    marginTop: 16,
+    textShadowColor: 'rgba(0, 0, 0, 0.1)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  timeContainer: {
+    flex: 1,
+  },
+  timeText: {
+    fontSize: 15,
+    fontWeight: '500',
   },
   modalOverlay: {
     flex: 1,
@@ -890,10 +930,10 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: 80,
     backgroundColor: '#FF3B30',
-    borderTopRightRadius: 12,
-    borderBottomRightRadius: 12,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 0,
   },
   deleteButtonInner: {
     width: '100%',
@@ -904,5 +944,22 @@ const styles = StyleSheet.create({
   deleteButtonText: {
     fontSize: 17,
     color: '#FFFFFF',
+  },
+  dateHeader: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 8,
+    marginTop: 16,
+  },
+  commentButton: {
+    padding: 4,
+    marginLeft: 4,
+  },
+  commentIcon: {
+    fontSize: 16,
+  },
+  tileWrapper: {
+    position: 'relative',
+    marginBottom: 8,
   },
 });
