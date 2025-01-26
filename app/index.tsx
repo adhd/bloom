@@ -8,6 +8,7 @@ import { saveEntry, getEntries, updateEntry, deleteEntry } from './firebase';
 import * as Notifications from 'expo-notifications';
 import { registerForPushNotificationsAsync, scheduleDailyNotifications, handleNotificationResponse } from './notifications';
 import { LinearGradient } from 'expo-linear-gradient';
+import Optimize from './optimize';
 
 const ENERGY_LEVELS = [
   { value: 1, emoji: '😴', label: '1' },
@@ -148,7 +149,7 @@ export default function App() {
     acc[level.value] = new Animated.Value(1);
     return acc;
   }, {} as { [key: number]: Animated.Value });
-  const [activeTab, setActiveTab] = useState<'log' | 'insights'>('log');
+  const [activeTab, setActiveTab] = useState<'log' | 'insights' | 'optimize'>('log');
   const [showCommentModal, setShowCommentModal] = useState(false);
   const [pendingComment, setPendingComment] = useState('');
   const [selectedEntryForComment, setSelectedEntryForComment] = useState<EnergyEntry | null>(null);
@@ -463,6 +464,10 @@ export default function App() {
       return <Insights entries={entries} theme={theme} />;
     }
 
+    if (activeTab === 'optimize') {
+      return <Optimize entries={entries} theme={theme} />;
+    }
+
     const groupedEntries = groupEntriesByDate(entries);
 
     return (
@@ -640,6 +645,19 @@ export default function App() {
                 patterns
               </Text>
               {activeTab === 'insights' && <View style={[styles.activeDot, { backgroundColor: theme.text }]} />}
+            </TouchableOpacity>
+            <TouchableOpacity 
+              onPress={() => setActiveTab('optimize')}
+              style={styles.indicatorButton}
+            >
+              <Text style={[
+                styles.indicatorText,
+                { color: theme.textSecondary },
+                activeTab === 'optimize' && [styles.activeIndicatorText, { color: theme.text }]
+              ]}>
+                optimize
+              </Text>
+              {activeTab === 'optimize' && <View style={[styles.activeDot, { backgroundColor: theme.text }]} />}
             </TouchableOpacity>
           </View>
         </View>
