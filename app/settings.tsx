@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch } from 'react-native';
+import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import TrackerSettings from './components/TrackerSettings';
 import { PrivacyPolicy } from './components/PrivacyPolicy';
 import { TermsOfService } from './components/TermsOfService';
+import { ConfirmDialog } from './components/ConfirmDialog';
+import { EnergyEntry } from './types';
 
 interface SettingsProps {
   theme: {
@@ -15,6 +18,8 @@ interface SettingsProps {
   };
   colorScheme: 'light' | 'dark';
   onThemeToggle: () => void;
+  entries?: EnergyEntry[];
+  onClearHistory?: () => void;
 }
 
 interface SettingsSectionProps {
@@ -53,12 +58,45 @@ const SettingsRow: React.FC<SettingsRowProps> = ({ label, value, theme, onPress,
   </TouchableOpacity>
 );
 
-const Settings: React.FC<SettingsProps> = ({ theme, colorScheme, onThemeToggle }) => {
+const Settings: React.FC<SettingsProps> = ({ 
+  theme, 
+  colorScheme, 
+  onThemeToggle,
+  entries = [],
+  onClearHistory = () => {} 
+}) => {
   const [notificationsEnabled, setNotificationsEnabled] = React.useState(true);
-  const [reminderTime, setReminderTime] = React.useState("9:00 PM");
+  const [morningReminderTime, setMorningReminderTime] = React.useState("9:00 AM");
+  const [eveningReminderTime, setEveningReminderTime] = React.useState("9:00 PM");
+  const [isTimePickerVisible, setIsTimePickerVisible] = useState(false);
+  const [activeReminder, setActiveReminder] = useState<'morning' | 'evening' | null>(null);
   const [isPrivacyPolicyVisible, setIsPrivacyPolicyVisible] = useState(false);
   const [isTermsOfServiceVisible, setIsTermsOfServiceVisible] = useState(false);
+  const [isClearHistoryVisible, setIsClearHistoryVisible] = useState(false);
+  const [isExportDialogVisible, setIsExportDialogVisible] = useState(false);
   const appVersion = "1.0.0";  // This would normally come from your app config
+
+  const handleTimeConfirm = (date: Date) => {
+    const formattedTime = date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+
+    if (activeReminder === 'morning') {
+      setMorningReminderTime(formattedTime);
+    } else if (activeReminder === 'evening') {
+      setEveningReminderTime(formattedTime);
+    }
+    
+    setIsTimePickerVisible(false);
+    setActiveReminder(null);
+  };
+
+  const showTimePicker = (type: 'morning' | 'evening') => {
+    setActiveReminder(type);
+    setIsTimePickerVisible(true);
+  };
 
   return (
     <>
@@ -86,7 +124,7 @@ const Settings: React.FC<SettingsProps> = ({ theme, colorScheme, onThemeToggle }
 
         <SettingsSection title="Notifications" theme={theme}>
           <SettingsRow 
-            label="Daily Reminder" 
+            label="Daily Reminders" 
             theme={theme}
             rightElement={
               <Switch 
@@ -96,12 +134,22 @@ const Settings: React.FC<SettingsProps> = ({ theme, colorScheme, onThemeToggle }
               />
             }
           />
-          <SettingsRow 
-            label="Reminder Time"
-            value={reminderTime}
-            theme={theme}
-            onPress={() => {/* Time picker would go here */}}
-          />
+          {notificationsEnabled && (
+            <>
+              <SettingsRow 
+                label="Morning Reminder"
+                value={morningReminderTime}
+                theme={theme}
+                onPress={() => showTimePicker('morning')}
+              />
+              <SettingsRow 
+                label="Evening Reminder"
+                value={eveningReminderTime}
+                theme={theme}
+                onPress={() => showTimePicker('evening')}
+              />
+            </>
+          )}
         </SettingsSection>
 
         <SettingsSection title="Data" theme={theme}>
@@ -109,13 +157,13 @@ const Settings: React.FC<SettingsProps> = ({ theme, colorScheme, onThemeToggle }
             label="Export Data"
             value="CSV"
             theme={theme}
-            onPress={() => {/* Export functionality would go here */}}
+            onPress={() => setIsExportDialogVisible(true)}
           />
           <SettingsRow 
             label="Clear History"
-            value="0 entries"
+            value={`${entries.length} entries`}
             theme={theme}
-            onPress={() => {/* Clear data functionality would go here */}}
+            onPress={() => setIsClearHistoryVisible(true)}
           />
         </SettingsSection>
 
@@ -138,6 +186,16 @@ const Settings: React.FC<SettingsProps> = ({ theme, colorScheme, onThemeToggle }
         </SettingsSection>
       </ScrollView>
 
+      <DateTimePickerModal
+        isVisible={isTimePickerVisible}
+        mode="time"
+        onConfirm={handleTimeConfirm}
+        onCancel={() => {
+          setIsTimePickerVisible(false);
+          setActiveReminder(null);
+        }}
+      />
+
       <PrivacyPolicy
         isVisible={isPrivacyPolicyVisible}
         onClose={() => setIsPrivacyPolicyVisible(false)}
@@ -146,6 +204,26 @@ const Settings: React.FC<SettingsProps> = ({ theme, colorScheme, onThemeToggle }
       <TermsOfService
         isVisible={isTermsOfServiceVisible}
         onClose={() => setIsTermsOfServiceVisible(false)}
+        theme={theme}
+      />
+      <ConfirmDialog
+        isVisible={isClearHistoryVisible}
+        onClose={() => setIsClearHistoryVisible(false)}
+        onConfirm={onClearHistory}
+        title="Clear History"
+        message="Are you sure you want to clear all your entries? This action cannot be undone."
+        confirmText="Clear"
+        cancelText="Cancel"
+        theme={theme}
+      />
+      <ConfirmDialog
+        isVisible={isExportDialogVisible}
+        onClose={() => setIsExportDialogVisible(false)}
+        onConfirm={() => setIsExportDialogVisible(false)}
+        title="Coming Soon"
+        message="The export feature is currently in development. Check back soon!"
+        confirmText="Got it"
+        showCancel={false}
         theme={theme}
       />
     </>

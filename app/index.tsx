@@ -474,6 +474,20 @@ export default function App() {
         theme={theme}
         colorScheme={colorScheme}
         onThemeToggle={toggleTheme}
+        entries={entries}
+        onClearHistory={async () => {
+          try {
+            // Delete all entries from Firebase
+            await Promise.all(entries.map(entry => entry.id ? deleteEntry(entry.id) : Promise.resolve()));
+            // Clear local state
+            setEntries([]);
+            if (Platform.OS !== 'web') {
+              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            }
+          } catch (error) {
+            console.error('Error clearing history:', error);
+          }
+        }}
       />;
     }
 
