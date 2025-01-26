@@ -9,6 +9,7 @@ import * as Notifications from 'expo-notifications';
 import { registerForPushNotificationsAsync, scheduleDailyNotifications, handleNotificationResponse } from './notifications';
 import { LinearGradient } from 'expo-linear-gradient';
 import Optimize from './optimize';
+import Settings from './settings';
 
 const ENERGY_LEVELS = [
   { value: 1, emoji: '😴', label: '1' },
@@ -149,7 +150,7 @@ export default function App() {
     acc[level.value] = new Animated.Value(1);
     return acc;
   }, {} as { [key: number]: Animated.Value });
-  const [activeTab, setActiveTab] = useState<'log' | 'insights' | 'optimize'>('log');
+  const [activeTab, setActiveTab] = useState<'log' | 'insights' | 'optimize' | 'settings'>('log');
   const [showCommentModal, setShowCommentModal] = useState(false);
   const [pendingComment, setPendingComment] = useState('');
   const [selectedEntryForComment, setSelectedEntryForComment] = useState<EnergyEntry | null>(null);
@@ -468,6 +469,14 @@ export default function App() {
       return <Optimize entries={entries} theme={theme} />;
     }
 
+    if (activeTab === 'settings') {
+      return <Settings 
+        theme={theme}
+        colorScheme={colorScheme}
+        onThemeToggle={toggleTheme}
+      />;
+    }
+
     const groupedEntries = groupEntriesByDate(entries);
 
     return (
@@ -658,6 +667,19 @@ export default function App() {
                 optimize
               </Text>
               {activeTab === 'optimize' && <View style={[styles.activeDot, { backgroundColor: theme.text }]} />}
+            </TouchableOpacity>
+            <TouchableOpacity 
+              onPress={() => setActiveTab('settings')}
+              style={styles.indicatorButton}
+            >
+              <Text style={[
+                styles.indicatorText,
+                { color: theme.textSecondary },
+                activeTab === 'settings' && [styles.activeIndicatorText, { color: theme.text }]
+              ]}>
+                settings
+              </Text>
+              {activeTab === 'settings' && <View style={[styles.activeDot, { backgroundColor: theme.text }]} />}
             </TouchableOpacity>
           </View>
         </View>
